@@ -1,0 +1,30 @@
+name: Tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  pytest:
+    name: Tests (Home Assistant ${{ matrix.ha }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Each pytest-homeassistant-custom-component release pins one
+          # Home Assistant version.
+          - ha: "2026.2.3"
+            phcc: "0.13.316"
+            python: "3.13"
+          - ha: "2026.10.4"
+            phcc: "0.13.375"
+            python: "3.14"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: pip install "pytest-homeassistant-custom-component==${{ matrix.phcc }}" "webuntis==0.1.24" "PyOTP>=2.10.0"
+      - run: pytest -q tests

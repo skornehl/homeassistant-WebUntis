@@ -575,10 +575,11 @@ class ExtendedSession(WebUntisSession):
             )
             return
 
-        rest_by_time = {
-            self._time_key(lesson["start"], lesson["end"]): lesson
-            for lesson in rest_lessons
-        }
+        rest_by_time: dict[tuple, list[dict]] = {}
+        for rest_lesson in rest_lessons:
+            rest_by_time.setdefault(
+                self._time_key(rest_lesson["start"], rest_lesson["end"]), []
+            ).append(rest_lesson)
 
         for lesson in result:
             data = getattr(lesson, "_data", None)
@@ -586,11 +587,15 @@ class ExtendedSession(WebUntisSession):
             if not data:
                 continue
 
-            fallback = rest_by_time.get(
-                self._time_key(
-                    lesson.start.isoformat(),
-                    lesson.end.isoformat(),
-                )
+            fallback = self._matching_rest_lesson(
+                data,
+                rest_by_time.get(
+                    self._time_key(
+                        lesson.start.isoformat(),
+                        lesson.end.isoformat(),
+                    ),
+                    [],
+                ),
             )
 
             if not fallback:
@@ -648,6 +653,52 @@ class ExtendedSession(WebUntisSession):
 
                     if not existing.get("longName") and element.get("long_name"):
                         existing["longName"] = element["long_name"]
+
+    @staticmethod
+    def _matching_rest_lesson(data, candidates):
+        """Pick the REST lesson that belongs to this JSON-RPC lesson.
+
+        Parallel lessons (e.g. elective courses) share their start and end, so
+        the time alone does not tell them apart, and the REST timetable may
+        list only one of them. A lesson with a subject therefore only takes a
+        REST lesson with the same subject (or one without any subject), so it
+        never takes over the subject, teacher or room of a parallel course.
+        """
+
+        def ids(elements):
+            return {
+                element.get("id")
+                for element in elements or []
+                if element.get("id") is not None
+            }
+
+        subject_ids = ids(data.get("su"))
+        if not subject_ids:
+            return candidates[0] if len(candidates) == 1 else None
+
+        matches = [
+            candidate
+            for candidate in candidates
+            if subject_ids & ids(candidate.get("subjects"))
+        ]
+        if len(matches) > 1:
+            # Parallel groups of one subject (e.g. team projects): the teacher
+            # tells them apart.
+            teacher_ids = ids(data.get("te"))
+            matches = [
+                candidate
+                for candidate in matches
+                if teacher_ids & ids(candidate.get("teachers"))
+            ]
+        if len(matches) == 1:
+            return matches[0]
+        if (
+            not matches
+            and len(candidates) == 1
+            and not ids(candidates[0].get("subjects"))
+        ):
+            return candidates[0]
+        return None
 
     @staticmethod
     def _time_key(start, end):
