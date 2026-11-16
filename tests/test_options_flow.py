@@ -11,8 +11,14 @@ from custom_components.webuntis.utils.course_choice import (
     parallel_courses,
 )
 
-from .conftest import make_entry, make_server
-from .timetable import SPANISH_KEY, SPORT_WPI_KEY, TEAM_ROBOTICS_KEY, week
+from .conftest import Element, make_entry, make_server
+from .timetable import (
+    SPANISH_KEY,
+    SPORT_WPI_KEY,
+    TEAM_ROBOTICS_KEY,
+    TEAM_THEATRE_KEY,
+    week,
+)
 
 
 async def open_courses_step(hass, entry):
@@ -42,17 +48,21 @@ def entry(hass):
     return entry
 
 
-async def test_dropdowns_list_the_parallel_courses(hass, entry) -> None:
+async def test_each_dropdown_lists_its_own_block(hass, entry) -> None:
     result = await open_courses_step(hass, entry)
 
     assert result["type"] is FlowResultType.FORM
     assert result["step_id"] == "courses"
     assert result["description_placeholders"] == {"count": "5"}
-    for field in (CONF_COURSE_WPI, CONF_COURSE_TEAM_PROJECT):
-        options = select_options(result, field)
-        assert options[SPANISH_KEY] == "Spanisch Wahlpflicht – Hub · Mo 08:00, Mo 08:45"
-        assert options[TEAM_ROBOTICS_KEY] == "Teamprojekt – Rob · Do 11:40, Do 12:25"
-        assert "De|" not in options
+    assert select_options(result, CONF_COURSE_WPI) == {
+        "InfWP|": "Informatik Wahlpflicht – Bit · Mo 08:00, Mo 08:45",
+        SPANISH_KEY: "Spanisch Wahlpflicht – Hub · Mo 08:00, Mo 08:45",
+        SPORT_WPI_KEY: "Sport Wahlpflicht – Kra · Mo 08:00, Mo 08:45",
+    }
+    assert select_options(result, CONF_COURSE_TEAM_PROJECT) == {
+        TEAM_ROBOTICS_KEY: "Teamprojekt – Rob · Do 11:40, Do 12:25",
+        TEAM_THEATRE_KEY: "Teamprojekt – The · Do 11:40, Do 12:25",
+    }
 
 
 async def test_choice_is_saved(hass, entry) -> None:
@@ -82,10 +92,20 @@ async def test_cleared_field_saves_no_course(hass, entry) -> None:
 
 
 async def test_same_course_twice_is_refused(hass, entry) -> None:
+    """Without names that mark the blocks both dropdowns offer every block."""
+    unmarked = [
+        lesson.but(subjects=[Element(f"K{lesson.lsnumber}", f"Kurs {lesson.lsnumber}")])
+        for lesson in week()
+    ]
+    hass.data["webuntis"][entry.unique_id].parallel_courses = parallel_courses(unmarked)
     result = await open_courses_step(hass, entry)
+    assert select_options(result, CONF_COURSE_WPI) == select_options(
+        result, CONF_COURSE_TEAM_PROJECT
+    )
+    sport_wpi_key = "K12|"
     result = await hass.config_entries.options.async_configure(
         result["flow_id"],
-        {CONF_COURSE_WPI: SPORT_WPI_KEY, CONF_COURSE_TEAM_PROJECT: SPORT_WPI_KEY},
+        {CONF_COURSE_WPI: sport_wpi_key, CONF_COURSE_TEAM_PROJECT: sport_wpi_key},
     )
 
     assert result["type"] is FlowResultType.FORM

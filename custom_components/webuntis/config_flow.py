@@ -29,7 +29,13 @@ from .const import (
 )
 from .live_activities import LiveActivityOptionsFlowMixin
 from .notify import get_notification_data
-from .utils.course_choice import COURSE_OPTIONS, NO_COURSE, course_label, key_label
+from .utils.course_choice import (
+    COURSE_OPTIONS,
+    NO_COURSE,
+    course_label,
+    courses_for_option,
+    key_label,
+)
 from .utils.errors import *
 from .utils.qrLogin import parse_qr_code
 from .utils.schoolyears import resolve_schoolyear
@@ -871,27 +877,27 @@ class OptionsFlowHandler(config_entries.OptionsFlow, LiveActivityOptionsFlowMixi
 
         server = self.hass.data[DOMAIN][self._config_entry.unique_id]
         courses = server.parallel_courses
-        select_options = [
-            selector.SelectOptionDict(
-                value=course["value"],
-                label=course_label(course, self.hass.config.language),
-            )
-            for course in courses
-        ]
-        # Keep a stored choice selectable even when its course is not in the
-        # timetable right now (holidays), so saving does not drop it.
-        known = {course["value"] for course in courses}
-        for option in COURSE_OPTIONS:
-            current = self._config_entry.options.get(option)
-            if current and current not in known:
-                select_options.append(
-                    selector.SelectOptionDict(value=current, label=key_label(current))
-                )
-                known.add(current)
-
         defaults = user_input or self._config_entry.options
         schema = {}
+        offered_values: set[str] = set()
         for option in COURSE_OPTIONS:
+            offered = courses_for_option(courses, option)
+            offered_values.update(course["value"] for course in offered)
+            select_options = [
+                selector.SelectOptionDict(
+                    value=course["value"],
+                    label=course_label(course, self.hass.config.language),
+                )
+                for course in offered
+            ]
+            # Keep a stored choice selectable even when its course is not in
+            # the timetable right now (holidays), so saving does not drop it.
+            stored = self._config_entry.options.get(option)
+            if stored and stored not in {course["value"] for course in offered}:
+                select_options.append(
+                    selector.SelectOptionDict(value=stored, label=key_label(stored))
+                )
+
             current = defaults.get(option) or NO_COURSE
             schema[
                 vol.Optional(
@@ -909,7 +915,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow, LiveActivityOptionsFlowMixi
             step_id="courses",
             data_schema=vol.Schema(schema),
             errors=errors,
-            description_placeholders={"count": str(len(courses))},
+            description_placeholders={"count": str(len(offered_values))},
         )
 
     async def async_step_calendar(

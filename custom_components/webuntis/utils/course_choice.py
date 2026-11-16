@@ -17,6 +17,7 @@ their lesson number.
 from __future__ import annotations
 
 import contextlib
+import re
 from collections.abc import Iterable, Sequence
 from typing import Any
 
@@ -37,6 +38,24 @@ _WEEKDAYS = {
 }
 
 _MAX_TIMES_IN_LABEL = 4
+
+# Student groups longer than this or with a long run of digits are generated
+# IDs, not names.
+_MAX_GROUP_LENGTH = 24
+_GENERATED_ID = re.compile(r"\d{6}")
+
+# A course belongs to an elective block when at least this share of its
+# lessons runs in parallel to another course. Substitutions and one-off events
+# overlap a lesson now and then, an elective block every week.
+PARALLEL_SHARE = 0.5
+
+# Names that mark the block of an option, searched in subject and student group.
+_MARKERS = {
+    CONF_COURSE_WPI: re.compile(r"wp|wahlpflicht|elective", re.IGNORECASE),
+    CONF_COURSE_TEAM_PROJECT: re.compile(
+        r"team|projekt|project|(?<![a-z])tp(?![a-z])", re.IGNORECASE
+    ),
+}
 
 
 def _primary_subject(lesson: Any) -> tuple[str, str] | None:
@@ -178,12 +197,18 @@ def drop_parallel_courses(
 
 
 def parallel_courses(lessons: Iterable[Any]) -> list[dict[str, Any]]:
-    """Return every course that runs in parallel to another course.
+    """Return the courses of elective blocks, grouped by block.
 
-    Each course is a dict with ``value`` (the course key), ``name``, ``group``,
-    ``teachers`` and ``times`` (weekly ``(weekday, "HH:MM")`` slots). Courses
-    are sorted by their first weekly slot, so the courses of one elective block
-    stay together in a dropdown.
+    Only lessons that take place as planned count: a cancelled lesson next to
+    its substitute, or an irregular event, is no elective block. A course
+    belongs to a block when at least ``PARALLEL_SHARE`` of its lessons run in
+    parallel to another course of the block, so a one-off overlap does not
+    turn a regular subject into a choice.
+
+    Each course is a dict with ``value`` (the course key), ``short``, ``name``,
+    ``group``, ``teachers``, ``times`` (weekly ``(weekday, "HH:MM")`` slots)
+    and ``block`` (blocks numbered by their first lesson). The courses of one
+    block stay together, sorted by name.
     """
     lessons = list(lessons)
     keys = course_keys(lessons)
@@ -191,51 +216,133 @@ def parallel_courses(lessons: Iterable[Any]) -> list[dict[str, Any]]:
         (
             (lesson, key)
             for lesson, key in zip(lessons, keys, strict=True)
-            if key is not None and _code(lesson) != "irregular"
+            if key is not None and _code(lesson) is None
         ),
         key=lambda item: (item[0].start, item[0].end),
     )
 
-    parallel_keys: set[str] = set()
+    occurrences: dict[str, int] = {}
+    in_parallel: dict[str, set[int]] = {}
+    links: dict[str, set[str]] = {}
     for index, (lesson, key) in enumerate(regular):
-        for other, other_key in regular[index + 1 :]:
+        occurrences[key] = occurrences.get(key, 0) + 1
+        for other_index in range(index + 1, len(regular)):
+            other, other_key = regular[other_index]
             if other.start >= lesson.end:
                 break
-            if other_key != key:
-                parallel_keys.update((key, other_key))
+            if other_key == key:
+                continue
+            in_parallel.setdefault(key, set()).add(index)
+            in_parallel.setdefault(other_key, set()).add(other_index)
+            links.setdefault(key, set()).add(other_key)
+            links.setdefault(other_key, set()).add(key)
 
-    courses: dict[str, dict[str, Any]] = {}
-    for lesson, key in regular:
-        if key not in parallel_keys:
+    elective = {
+        key
+        for key, found in in_parallel.items()
+        if len(found) >= PARALLEL_SHARE * occurrences[key]
+    }
+
+    # Blocks: elective courses connected by running in parallel.
+    block_of: dict[str, int] = {}
+    blocks = 0
+    for _, key in regular:
+        if key not in elective or key in block_of:
             continue
+        members = []
+        stack = [key]
+        while stack:
+            current = stack.pop()
+            if current in block_of:
+                continue
+            block_of[current] = blocks
+            members.append(current)
+            stack.extend(
+                other
+                for other in links.get(current, ())
+                if other in elective and other not in block_of
+            )
+        if len(members) < 2:
+            for member in members:
+                del block_of[member]
+            continue
+        blocks += 1
+
+    # Weekly times and teachers also from cancelled lessons, so a course that
+    # is cancelled this week still shows its usual slots.
+    courses: dict[str, dict[str, Any]] = {}
+    planned = sorted(
+        (
+            (lesson, key)
+            for lesson, key in zip(lessons, keys, strict=True)
+            if key in block_of and _code(lesson) != "irregular"
+        ),
+        key=lambda item: (item[0].start, item[0].end),
+    )
+    for lesson, key in planned:
         course = courses.get(key)
         if course is None:
             subject = _primary_subject(lesson)
+            short, name = subject if subject else (key, key)
             course = courses[key] = {
                 "value": key,
-                "name": subject[1] if subject else key,
+                "short": short,
+                "name": name,
                 "group": _student_group(lesson),
                 "teachers": set(),
                 "times": set(),
+                "block": block_of[key],
             }
         course["times"].add((lesson.start.weekday(), lesson.start.strftime("%H:%M")))
-        if _code(lesson) is None:
-            course["teachers"].update(_teacher_names(lesson))
+        course["teachers"].update(_teacher_names(lesson))
 
     result = []
     for course in courses.values():
         course["teachers"] = sorted(course["teachers"])
         course["times"] = sorted(course["times"])
         result.append(course)
-    result.sort(key=lambda course: (course["times"][:1], course["name"]))
+    # Parallel groups of one subject (e.g. 16 team projects) by teacher.
+    result.sort(
+        key=lambda course: (course["block"], course["name"], course["teachers"])
+    )
     return result
+
+
+def courses_for_option(
+    courses: Sequence[dict[str, Any]], option: str
+) -> list[dict[str, Any]]:
+    """Return the courses offered for one option (WPI or team project).
+
+    A block is offered for an option when one of its courses carries the
+    option's marker in its subject or student group ("WPI", "Wahlpflicht",
+    "TP", "Teamprojekt", ...). Blocks without any marker are offered for an
+    option that has no marked block; without any marker every block is offered.
+    """
+
+    def text(course: dict[str, Any]) -> str:
+        return " ".join(
+            (course.get("short", ""), course.get("name", ""), course.get("group", ""))
+        )
+
+    marked = {
+        name: {course["block"] for course in courses if pattern.search(text(course))}
+        for name, pattern in _MARKERS.items()
+    }
+    if marked.get(option):
+        blocks = marked[option]
+    else:
+        taken = set().union(
+            *(found for name, found in marked.items() if name != option)
+        )
+        blocks = {course["block"] for course in courses} - taken
+    return [course for course in courses if course["block"] in blocks]
 
 
 def course_label(course: dict[str, Any], language: str | None = None) -> str:
     """Return a dropdown label like ``Spanisch WPI – Hub · Mo 08:00, Do 09:50``."""
     weekdays = _WEEKDAYS.get((language or "en").split("-")[0], _WEEKDAYS["en"])
     label = course["name"]
-    group = course.get("group")
+    group = _readable_group(course.get("group") or "")
     if group and group.lower() not in label.lower():
         label += f" ({group})"
     if course.get("teachers"):
@@ -252,5 +359,17 @@ def course_label(course: dict[str, Any], language: str | None = None) -> str:
 def key_label(key: str) -> str:
     """Return a readable label for a stored key that is not in the timetable."""
     subject, _, rest = key.partition(KEY_SEPARATOR)
-    group = rest.split(KEY_SEPARATOR)[0]
+    group = _readable_group(rest.split(KEY_SEPARATOR)[0])
     return f"{subject} ({group})" if group else subject
+
+
+def _readable_group(group: str) -> str:
+    """Return the student group if it is a name, not an internal Untis ID.
+
+    Some schools name groups like "WPI Spanisch 7", others leave generated IDs
+    such as "SG20260123120354_525" or long class lists; those only clutter
+    the label.
+    """
+    if len(group) > _MAX_GROUP_LENGTH or _GENERATED_ID.search(group):
+        return ""
+    return group

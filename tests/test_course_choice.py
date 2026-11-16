@@ -2,15 +2,20 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta
+
 from custom_components.webuntis.utils.course_choice import (
+    CONF_COURSE_TEAM_PROJECT,
+    CONF_COURSE_WPI,
     course_keys,
     course_label,
+    courses_for_option,
     drop_parallel_courses,
     key_label,
     parallel_courses,
 )
 
-from .conftest import Element
+from .conftest import Element, Lesson
 from .timetable import (
     GERMAN,
     MATH,
@@ -261,3 +266,123 @@ def test_long_label_is_shortened() -> None:
     assert course_label(course, "de") == (
         "Sport Wahlpflicht · Mo 08:00, Di 08:00, Mi 08:00, Do 08:00, …"
     )
+
+
+def weekly(subject, lsnumber, weekday, start, end, weeks=4, **changes):
+    """Return one lesson per week, like a regular timetable entry."""
+    first = MONDAY_8 + timedelta(days=weekday)
+    begin = first.replace(hour=int(start[:2]), minute=int(start[3:]))
+    finish = first.replace(hour=int(end[:2]), minute=int(end[3:]))
+    return [
+        Lesson(
+            start=begin + timedelta(weeks=week),
+            end=finish + timedelta(weeks=week),
+            subjects=[subject],
+            lsnumber=lsnumber,
+            id=lsnumber * 100 + week,
+            **changes,
+        )
+        for week in range(weeks)
+    ]
+
+
+MONDAY_8 = datetime(2026, 11, 16)
+ART = Element("Ku", "Kunst", 40)
+MUSIC = Element("Mu", "Musik", 41)
+CLASS_COUNCIL = Element("KR", "Klassenrat", 42)
+
+
+def test_cancelled_lesson_next_to_its_substitute_is_no_block() -> None:
+    art = weekly(ART, 40, 1, "10:00", "10:45")
+    art[1] = art[1].but(code="cancelled")
+    council = art[1].but(subjects=[CLASS_COUNCIL], lsnumber=42, id=1, code=None)
+
+    assert parallel_courses([*art, council]) == []
+
+
+def test_one_off_overlap_is_no_block() -> None:
+    """Class council once during art: no choice between them."""
+    art = weekly(ART, 40, 1, "10:00", "10:45")
+    council = art[2].but(subjects=[CLASS_COUNCIL], lsnumber=42, id=1)
+
+    assert parallel_courses([*art, council]) == []
+
+
+def test_weekly_split_is_its_own_block() -> None:
+    lessons = [
+        *week(),
+        *weekly(ART, 40, 1, "10:00", "10:45", weeks=1),
+        *weekly(MUSIC, 41, 1, "10:00", "10:45", weeks=1),
+    ]
+    courses = parallel_courses(lessons)
+
+    blocks = {}
+    for course in courses:
+        blocks.setdefault(course["block"], []).append(course["name"])
+    assert list(blocks.values()) == [
+        ["Informatik Wahlpflicht", "Spanisch Wahlpflicht", "Sport Wahlpflicht"],
+        ["Kunst", "Musik"],
+        ["Teamprojekt", "Teamprojekt"],
+    ]
+
+    def names(option):
+        return [course["name"] for course in courses_for_option(courses, option)]
+
+    assert names(CONF_COURSE_WPI) == [
+        "Informatik Wahlpflicht",
+        "Spanisch Wahlpflicht",
+        "Sport Wahlpflicht",
+    ]
+    assert names(CONF_COURSE_TEAM_PROJECT) == ["Teamprojekt", "Teamprojekt"]
+
+
+def test_unmarked_blocks_go_to_the_option_without_a_marked_block() -> None:
+    """WPI courses without "WP" in the name, team projects named "TP"."""
+    lessons = [
+        lesson.but(subjects=[Element(lesson.subjects[0].name[:3], "Kurs")])
+        if "Wahlpflicht" in lesson.subjects[0].long_name
+        else lesson
+        for lesson in week()
+    ]
+    lessons += [
+        *weekly(ART, 40, 1, "10:00", "10:45", weeks=1),
+        *weekly(MUSIC, 41, 1, "10:00", "10:45", weeks=1),
+    ]
+    courses = parallel_courses(lessons)
+
+    wpi = {course["value"] for course in courses_for_option(courses, CONF_COURSE_WPI)}
+    assert wpi == {"Spa|", "Spo|", "Inf|", "Ku|", "Mu|"}
+    team = courses_for_option(courses, CONF_COURSE_TEAM_PROJECT)
+    assert {course["value"] for course in team} == {TEAM_ROBOTICS_KEY, TEAM_THEATRE_KEY}
+
+
+def test_markers() -> None:
+    def offered(name, group=""):
+        course = {"short": name, "name": name, "group": group, "block": 0}
+        other = {"short": "X", "name": "X", "group": "", "block": 1}
+        return {
+            option: [c["block"] for c in courses_for_option([course, other], option)]
+            for option in (CONF_COURSE_WPI, CONF_COURSE_TEAM_PROJECT)
+        }
+
+    assert offered("WPI Spanisch") == {
+        CONF_COURSE_WPI: [0],
+        CONF_COURSE_TEAM_PROJECT: [1],
+    }
+    assert offered("Spa", "Wahlpflicht 8") == {
+        CONF_COURSE_WPI: [0],
+        CONF_COURSE_TEAM_PROJECT: [1],
+    }
+    assert offered("TP Robotik") == {
+        CONF_COURSE_WPI: [1],
+        CONF_COURSE_TEAM_PROJECT: [0],
+    }
+    assert offered("Teamprojekt") == {
+        CONF_COURSE_WPI: [1],
+        CONF_COURSE_TEAM_PROJECT: [0],
+    }
+    # "tp" only as a word of its own, not inside another word.
+    assert offered("Stpk") == {
+        CONF_COURSE_WPI: [0, 1],
+        CONF_COURSE_TEAM_PROJECT: [0, 1],
+    }
