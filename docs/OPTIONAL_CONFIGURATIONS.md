@@ -24,10 +24,17 @@ the course the student attends in each block.
 | course_wpi          | The student's course in the elective block (WPI/Wahlpflicht). | `None`  |
 | course_team_project | The student's team project.                                   | `None`  |
 
-The dropdowns list every course that runs in parallel to another course in the
-fetched timetable (current week and the next 30 days), with teacher and weekly
-times, e.g. `Spanisch Wahlpflicht – Hub · Mo 08:00, Mo 08:45`. In the holidays
-the list is empty; a stored choice stays selected.
+The dropdowns are filled from the fetched timetable (current week and the
+next 30 days, or as far as the school allows). Courses whose lessons mostly run
+in parallel to other courses form a block, e.g. the five WPI courses on Monday
+and Friday. Cancelled lessons and one-off overlaps do not count. Each dropdown
+lists the block whose subject or student group names it: `WP`/`Wahlpflicht`
+for the elective course, `TP`/`Team`/`Projekt` for the team project. A block
+without such a name, e.g. a class split into two art groups, goes to a dropdown
+that has no named block; if no block is named, both dropdowns list every block.
+Labels show the subject, teachers and weekly times, e.g.
+`WPI 7 Spanisch – Hub · Mo 08:00, Mo 08:45, Fr 09:50, Fr 10:45`. In the
+holidays the list is empty; a stored choice stays selected.
 
 Once a course is chosen, every other course that runs at the same time is left
 out of the calendar, the sensors, the `webuntis.get_timetable` and

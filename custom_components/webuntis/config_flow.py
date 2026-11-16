@@ -879,8 +879,10 @@ class OptionsFlowHandler(config_entries.OptionsFlow, LiveActivityOptionsFlowMixi
         courses = server.parallel_courses
         defaults = user_input or self._config_entry.options
         schema = {}
+        offered_values: set[str] = set()
         for option in COURSE_OPTIONS:
             offered = courses_for_option(courses, option)
+            offered_values.update(course["value"] for course in offered)
             select_options = [
                 selector.SelectOptionDict(
                     value=course["value"],
@@ -913,7 +915,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow, LiveActivityOptionsFlowMixi
             step_id="courses",
             data_schema=vol.Schema(schema),
             errors=errors,
-            description_placeholders={"count": str(len(courses))},
+            description_placeholders={"count": str(len(offered_values))},
         )
 
     async def async_step_calendar(

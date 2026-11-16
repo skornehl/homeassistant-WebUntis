@@ -39,6 +39,11 @@ _WEEKDAYS = {
 
 _MAX_TIMES_IN_LABEL = 4
 
+# Student groups longer than this or with a long run of digits are generated
+# IDs, not names.
+_MAX_GROUP_LENGTH = 24
+_GENERATED_ID = re.compile(r"\d{6}")
+
 # A course belongs to an elective block when at least this share of its
 # lessons runs in parallel to another course. Substitutions and one-off events
 # overlap a lesson now and then, an elective block every week.
@@ -263,10 +268,18 @@ def parallel_courses(lessons: Iterable[Any]) -> list[dict[str, Any]]:
             continue
         blocks += 1
 
+    # Weekly times and teachers also from cancelled lessons, so a course that
+    # is cancelled this week still shows its usual slots.
     courses: dict[str, dict[str, Any]] = {}
-    for lesson, key in regular:
-        if key not in block_of:
-            continue
+    planned = sorted(
+        (
+            (lesson, key)
+            for lesson, key in zip(lessons, keys, strict=True)
+            if key in block_of and _code(lesson) != "irregular"
+        ),
+        key=lambda item: (item[0].start, item[0].end),
+    )
+    for lesson, key in planned:
         course = courses.get(key)
         if course is None:
             subject = _primary_subject(lesson)
@@ -288,7 +301,10 @@ def parallel_courses(lessons: Iterable[Any]) -> list[dict[str, Any]]:
         course["teachers"] = sorted(course["teachers"])
         course["times"] = sorted(course["times"])
         result.append(course)
-    result.sort(key=lambda course: (course["block"], course["name"]))
+    # Parallel groups of one subject (e.g. 16 team projects) by teacher.
+    result.sort(
+        key=lambda course: (course["block"], course["name"], course["teachers"])
+    )
     return result
 
 
@@ -326,7 +342,7 @@ def course_label(course: dict[str, Any], language: str | None = None) -> str:
     """Return a dropdown label like ``Spanisch WPI – Hub · Mo 08:00, Do 09:50``."""
     weekdays = _WEEKDAYS.get((language or "en").split("-")[0], _WEEKDAYS["en"])
     label = course["name"]
-    group = course.get("group")
+    group = _readable_group(course.get("group") or "")
     if group and group.lower() not in label.lower():
         label += f" ({group})"
     if course.get("teachers"):
@@ -343,5 +359,17 @@ def course_label(course: dict[str, Any], language: str | None = None) -> str:
 def key_label(key: str) -> str:
     """Return a readable label for a stored key that is not in the timetable."""
     subject, _, rest = key.partition(KEY_SEPARATOR)
-    group = rest.split(KEY_SEPARATOR)[0]
+    group = _readable_group(rest.split(KEY_SEPARATOR)[0])
     return f"{subject} ({group})" if group else subject
+
+
+def _readable_group(group: str) -> str:
+    """Return the student group if it is a name, not an internal Untis ID.
+
+    Some schools name groups like "WPI Spanisch 7", others leave generated IDs
+    such as "SG20260123120354_525" or long class lists; those only clutter
+    the label.
+    """
+    if len(group) > _MAX_GROUP_LENGTH or _GENERATED_ID.search(group):
+        return ""
+    return group
