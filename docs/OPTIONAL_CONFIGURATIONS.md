@@ -11,6 +11,38 @@ Control which lessons or subjects are included or excluded.
 | filter_description | Exclude lessons containing specific text in description. | `"Online"`       |
 | invalid_subjects   | Allow lessons without subjects.                          | `False`          |
 
+### Course Choice Options
+
+Some schools put every course of an elective block (e.g. WPI/Wahlpflicht or
+team projects) into each student's timetable, so the calendar shows several
+lessons at the same time and changes of other students' courses trigger events
+and notifications. Under **Options → Course choice (WPI, team project)** pick
+the course the student attends in each block.
+
+| Option              | Description                                                   | Default |
+| :------------------ | :------------------------------------------------------------ | :------ |
+| course_wpi          | The student's course in the elective block (WPI/Wahlpflicht). | `None`  |
+| course_team_project | The student's team project.                                   | `None`  |
+
+The dropdowns list every course that runs in parallel to another course in the
+fetched timetable (current week and the next 30 days), with teacher and weekly
+times, e.g. `Spanisch Wahlpflicht – Hub · Mo 08:00, Mo 08:45`. In the holidays
+the list is empty; a stored choice stays selected.
+
+Once a course is chosen, every other course that runs at the same time is left
+out of the calendar, the sensors, the `webuntis.get_timetable` and
+`webuntis.count_lessons` services (unless `apply_filter` is off) and the lesson
+change detection, so it fires no events and sends no notifications. Substitute
+lessons of a new subject in the slot (e.g. "Math instead of Spanish") are
+kept. Changes of the chosen course itself are reported as before.
+
+A course is identified by its subject and student group, not by teacher or
+room, so a substitution or cancellation does not break the choice. Two
+parallel courses with the same subject (e.g. all team projects share the
+subject "Teamprojekt") are told apart by their Untis lesson number; that
+number may change with a new timetable, then choose the course again. Clear a
+field to show all courses again.
+
 ### Calendar Options
 
 Customize what is shown in calendar entities.

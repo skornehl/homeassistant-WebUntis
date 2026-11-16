@@ -230,6 +230,18 @@
         "description": "Settings to customize the calendar.",
         "title": "Calendar Settings"
       },
+      "courses": {
+        "title": "Course choice",
+        "description": "Some schools list every course of an elective block in each student's timetable. Choose the course your child attends: the other courses running at the same time are then hidden from the calendar and the sensors and no longer trigger lesson change events or notifications.\n\n{count} courses run in parallel in the coming weeks. Clear a field to show all courses again.",
+        "data": {
+          "course_wpi": "Elective course (WPI)",
+          "course_team_project": "Team project"
+        },
+        "data_description": {
+          "course_wpi": "The course your child attends in the elective block (Wahlpflicht).",
+          "course_team_project": "The team project your child attends."
+        }
+      },
       "edit_live_activity": {
         "title": "Live Timetable",
         "description": "Add or edit a Live Activity for the timetable.",
@@ -293,6 +305,7 @@
         "menu_options": {
           "backend": "Backend",
           "calendar": "Calendar",
+          "courses": "Course choice (WPI, team project)",
           "filter": "Filter",
           "lesson": "Lesson Display",
           "live_activities_menu": "Live Timetable",
@@ -352,6 +365,7 @@
     "error": {
       "not_a_dict": "Has to be a dictionary",
       "notification_invalid": "Notification could not be sent. See logs for more information.",
+      "same_course": "Choose different courses for the elective course and the team project.",
       "unknown": "Unexpected error",
       "unknown_service": "Service ID not found."
     }
