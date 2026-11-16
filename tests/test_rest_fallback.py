@@ -124,3 +124,24 @@ def test_parallel_groups_of_one_subject_are_matched_by_teacher() -> None:
     assert theatre._data["lstext"] == "The"
     assert ids(robotics, "ro") == [41]
     assert ids(theatre, "ro") == [42]
+
+
+def test_indistinguishable_parallel_lessons_get_no_fallback() -> None:
+    first = jsonrpc_lesson(200, 31, 41)
+
+    fill(
+        [first],
+        [rest_lesson(200, 31, 41, text="A"), rest_lesson(200, 31, 42, text="B")],
+    )
+
+    assert "lstext" not in first._data
+
+
+def test_rest_lesson_without_subject_still_fills_a_single_lesson() -> None:
+    lesson = jsonrpc_lesson(101, 11, 21)
+    rest = {**rest_lesson(101, 11, 21, text="Exkursion"), "subjects": []}
+
+    fill([lesson], [rest])
+
+    assert lesson._data["lstext"] == "Exkursion"
+    assert ids(lesson, "su") == [101]

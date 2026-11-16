@@ -27,4 +27,4 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
       - run: pip install "pytest-homeassistant-custom-component==${{ matrix.phcc }}" "webuntis==0.1.24" "PyOTP>=2.10.0"
-      - run: pytest -q tests
+      - run: pytest -q tests --cov=custom_components/webuntis --cov-report=term

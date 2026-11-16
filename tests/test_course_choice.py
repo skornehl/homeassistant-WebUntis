@@ -179,3 +179,85 @@ def test_key_label() -> None:
     assert key_label(SPANISH_KEY) == "SpaWP"
     assert key_label("SpaWP|WPI 8") == "SpaWP (WPI 8)"
     assert key_label(TEAM_ROBOTICS_KEY) == "TP"
+
+
+class BrokenLesson:
+    """A lesson whose master data the server does not hand out.
+
+    python-webuntis raises when a lesson refers to a subject, teacher or room
+    the account may not read ("no right for getTeachers()").
+    """
+
+    def __init__(self, lesson):
+        self._lesson = lesson
+
+    def __getattr__(self, name):
+        if name in ("start", "end"):
+            return getattr(self._lesson, name)
+        raise KeyError(name)
+
+
+def test_unreadable_lesson_is_never_part_of_a_choice() -> None:
+    broken = BrokenLesson(week()[0])
+
+    assert course_keys([broken]) == [None]
+    remaining, _ = drop_parallel_courses([*week(), broken], [SPANISH_KEY])
+    assert broken in remaining
+    assert parallel_courses([broken]) == []
+
+
+def test_unreadable_details_do_not_break_the_course() -> None:
+    class NoTeachers:
+        def __init__(self, lesson):
+            self.__dict__.update(vars(lesson))
+
+        @property
+        def teachers(self):
+            raise KeyError("te")
+
+        @property
+        def studentGroup(self):
+            raise KeyError("sg")
+
+    lessons = [NoTeachers(lesson) for lesson in week()]
+    spanish = next(c for c in parallel_courses(lessons) if c["value"] == SPANISH_KEY)
+    assert spanish["teachers"] == []
+    assert spanish["group"] == ""
+
+
+def test_missing_lesson_number_and_code() -> None:
+    class Bare:
+        def __init__(self, lesson):
+            self.__dict__.update(vars(lesson))
+
+        @property
+        def lsnumber(self):
+            raise KeyError("lsnumber")
+
+        @property
+        def code(self):
+            raise KeyError("code")
+
+    team = [Bare(lesson) for lesson in week() if lesson.subjects[0].name == "TP"]
+    # Without lesson numbers the two team projects cannot be told apart.
+    assert set(course_keys(team)) == {"TP|"}
+    assert {course["value"] for course in parallel_courses(team)} == set()
+    # A lesson number of -1 means "none sent".
+    assert course_keys([week()[0].but(lsnumber=-1)]) == [SPANISH_KEY]
+
+
+def test_subject_without_names_has_no_key() -> None:
+    nameless = week()[0].but(subjects=[Element("", "", 999)])
+    assert course_keys([nameless]) == [None]
+
+
+def test_long_label_is_shortened() -> None:
+    course = {
+        "name": "Sport Wahlpflicht",
+        "group": "",
+        "teachers": [],
+        "times": [(day, "08:00") for day in range(5)],
+    }
+    assert course_label(course, "de") == (
+        "Sport Wahlpflicht · Mo 08:00, Di 08:00, Mi 08:00, Do 08:00, …"
+    )

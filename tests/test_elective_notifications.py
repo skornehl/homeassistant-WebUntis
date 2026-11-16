@@ -239,3 +239,16 @@ async def test_service_without_filter_shows_all_courses(hass) -> None:
     assert {"Spanisch Wahlpflicht", "Sport Wahlpflicht"} <= {
         lesson["name"] for lesson in unfiltered
     }
+
+
+async def test_count_lessons_respects_the_choice(hass) -> None:
+    server = make_server(hass, make_entry({CONF_COURSE_WPI: SPANISH_KEY}), week())
+    start, _ = WPI_PERIODS[0]
+    end = start + timedelta(days=7)
+
+    filtered = server._count_lessons(start, end, True)
+    unfiltered = server._count_lessons(start, end, False)
+
+    assert "Sport Wahlpflicht" not in filtered
+    assert filtered["Spanisch Wahlpflicht"] == 2
+    assert unfiltered["Sport Wahlpflicht"] == 2
