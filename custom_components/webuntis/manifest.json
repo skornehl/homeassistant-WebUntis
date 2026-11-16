@@ -19,5 +19,5 @@
     "webuntis==0.1.24",
     "PyOTP>=2.10.0"
   ],
-  "version": "v3.4.1"
+  "version": "v3.4.2"
 }

@@ -161,3 +161,64 @@ def test_choices_leave_only_the_students_courses() -> None:
     assert wpi == {"WPI 7 Spanisch"}
     assert {lesson.teachers[0].name for lesson in team} == {"T07"}
     assert len(team) == 2
+
+
+def spanish_cancelled_all_week() -> list[Lesson]:
+    return [
+        lesson.but(code="cancelled")
+        if lesson.subjects[0].name == "WPI 7 SN"
+        else lesson
+        for lesson in school_week()
+    ]
+
+
+def test_course_cancelled_all_week_keeps_its_place_and_label() -> None:
+    """Spanish is cancelled in every lesson of the only week the school releases.
+
+    It has no lesson that takes place, but it still runs in parallel to the
+    WPI block, so it stays in the dropdown with its full label.
+    """
+    courses = courses_for_option(
+        parallel_courses(spanish_cancelled_all_week()), CONF_COURSE_WPI
+    )
+    labels = {course["value"]: course_label(course, "de") for course in courses}
+
+    assert len(labels) == 5
+    assert labels[SPANISH_KEY] == (
+        "WPI 7 Spanisch – L3 · Mo 08:00, Mo 08:45, Fr 09:50, Fr 10:45"
+    )
+
+
+def test_two_course_block_with_one_course_cancelled_all_week() -> None:
+    lessons = [
+        lesson.but(code="cancelled")
+        if lesson.subjects[0].name == "WPI 7 SN"
+        else lesson
+        for lesson in school_week()
+        if lesson.subjects[0].name not in ("WPI 7 Frz", "WPI 7 NaWi", "WPI 7 WAT")
+    ]
+    names = [
+        course["name"]
+        for course in courses_for_option(parallel_courses(lessons), CONF_COURSE_WPI)
+    ]
+    assert names == ["WPI 7 Spanisch", "WPI 7 Sport"]
+
+
+def test_substitute_next_to_a_cancelled_lesson_leaves_the_dropdowns_alone() -> None:
+    """One week only: art group A cancelled, a class council takes its place."""
+    lessons = []
+    for lesson in school_week():
+        if lesson.lsnumber == 4001:  # art, group without ID
+            lessons.append(lesson.but(code="cancelled"))
+            lessons.append(
+                lesson.but(subjects=[Element("KR", "Klassenrat", 4021)], lsnumber=4021)
+            )
+        else:
+            lessons.append(lesson)
+    courses = parallel_courses(lessons)
+
+    def labels(found):
+        return [(course["value"], course_label(course, "de")) for course in found]
+
+    for option in (CONF_COURSE_WPI, CONF_COURSE_TEAM_PROJECT):
+        assert labels(courses_for_option(courses, option)) == labels(offered(option))
