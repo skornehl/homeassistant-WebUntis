@@ -200,7 +200,8 @@ def parallel_courses(lessons: Iterable[Any]) -> list[dict[str, Any]]:
     """Return the courses of elective blocks, grouped by block.
 
     Only lessons that take place as planned count: a cancelled lesson next to
-    its substitute, or an irregular event, is no elective block. A course
+    its substitute, or an irregular event, is no elective block. A course that
+    is cancelled in all its lessons counts with those instead. A course
     belongs to a block when at least ``PARALLEL_SHARE`` of its lessons run in
     parallel to another course of the block, so a one-off overlap does not
     turn a regular subject into a choice.
@@ -212,11 +213,23 @@ def parallel_courses(lessons: Iterable[Any]) -> list[dict[str, Any]]:
     """
     lessons = list(lessons)
     keys = course_keys(lessons)
+    # A course cancelled in every lesson of the fetched timetable (some schools
+    # release only one week) has no lesson that takes place. Its cancelled
+    # lessons count instead, so it keeps its place in the block.
+    taking_place = {
+        key
+        for lesson, key in zip(lessons, keys, strict=True)
+        if key is not None and _code(lesson) is None
+    }
     regular = sorted(
         (
             (lesson, key)
             for lesson, key in zip(lessons, keys, strict=True)
-            if key is not None and _code(lesson) is None
+            if key is not None
+            and (
+                _code(lesson) is None
+                or (_code(lesson) == "cancelled" and key not in taking_place)
+            )
         ),
         key=lambda item: (item[0].start, item[0].end),
     )

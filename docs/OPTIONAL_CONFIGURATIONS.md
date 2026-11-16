@@ -27,11 +27,13 @@ the course the student attends in each block.
 The dropdowns are filled from the fetched timetable (current week and the
 next 30 days, or as far as the school allows). Courses whose lessons mostly run
 in parallel to other courses form a block, e.g. the five WPI courses on Monday
-and Friday. Cancelled lessons and one-off overlaps do not count. Each dropdown
-lists the block whose subject or student group names it: `WP`/`Wahlpflicht`
-for the elective course, `TP`/`Team`/`Projekt` for the team project. A block
-without such a name, e.g. a class split into two art groups, goes to a dropdown
-that has no named block; if no block is named, both dropdowns list every block.
+and Friday. Cancelled lessons and one-off overlaps do not count, except for a
+course cancelled in all its lessons: it stays in its block with its usual
+times. Each dropdown lists the block whose subject or student group names it:
+`WP`/`Wahlpflicht` for the elective course, `TP`/`Team`/`Projekt` for the team
+project. A block without such a name, e.g. a class split into two art groups,
+goes to a dropdown that has no named block; if no block is named, both
+dropdowns list every block.
 Labels show the subject, teachers and weekly times, e.g.
 `WPI 7 Spanisch – Hub · Mo 08:00, Mo 08:45, Fr 09:50, Fr 10:45`. In the
 holidays the list is empty; a stored choice stays selected.
