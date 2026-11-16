@@ -19,6 +19,7 @@
 | **30-Day Calendar** | Displays all lessons in the calendar or calendar-card for the upcoming month. | [Entities & Services](docs/ENTITIES_AND_SERVICES.md) |
 | **Lesson Sensors** | Includes school start/end times and next lesson, useful for wake-up automations. | [Examples & Automations](docs/EXAMPLES_AND_AUTOMATIONS.md) |
 | **Lesson Change Notifications** | Get notified for cancellations, room changes, teacher changes, and lesson swaps. | [Notification Options](docs/OPTIONAL_CONFIGURATIONS.md#notification-options) |
+| **Course Choice (WPI, Team Project)** | Your school lists every elective course in each timetable? Pick your course, and the courses running in parallel for other students disappear from calendar, sensors and notifications. | [Course Choice Options](docs/OPTIONAL_CONFIGURATIONS.md#course-choice-options) |
 | **Live Timetable (Live Activities)** | Display the current timetable in a live view on your phone or tablet. (Currently only available for iOS) | [Live Activities](docs/OPTIONAL_CONFIGURATIONS.md#live-activities) |
 | **Fetch Lessons Service** | Request lessons for a specific date range. | [`webuntis.get_timetable`](docs/ENTITIES_AND_SERVICES.md#-webuntisget_timetable) |
 | **Count Lessons Service** | Count lessons by subject within a given date range. | [`webuntis.count_lessons`](docs/ENTITIES_AND_SERVICES.md#-webuntiscount_lessons) |
@@ -41,7 +42,7 @@ You can install WebUntis via the HA Marketplace or manually. For detailed instru
 
 - **Entities & Services** – Full list of entities, their German/English names, and available services:
   [Entities & Services](docs/ENTITIES_AND_SERVICES.md)
-- **Optional Configurations** – All configuration options for filters, calendars, lessons, notifications, live timetable, and backend:
+- **Optional Configurations** – All configuration options for filters, course choice, calendars, lessons, notifications, live timetable, and backend:
   [Optional Configurations](docs/OPTIONAL_CONFIGURATIONS.md)
 - **Examples & Automations** – Ready-to-use automations and template snippets for common use cases:
   [Examples & Automations](docs/EXAMPLES_AND_AUTOMATIONS.md)

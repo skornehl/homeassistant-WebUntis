@@ -44,6 +44,11 @@ from .const import (
 from .live_activities import LiveActivityManager
 from .notify import *
 from .services import async_setup_services
+from .utils.course_choice import (
+    COURSE_OPTIONS,
+    drop_parallel_courses,
+    parallel_courses,
+)
 from .utils.exams import return_exam_events
 from .utils.homework import return_homework_events
 from .utils.qrLogin import QrData, parse_qr_code
@@ -283,6 +288,16 @@ class WebUntis:
 
         self.filter_description = config.options["filter_description"]
         self.generate_json = config.options["generate_json"]
+
+        # Chosen course per elective block (WPI, team project). Courses running
+        # in parallel to a chosen one belong to other students.
+        self.course_choices = [
+            choice
+            for option in COURSE_OPTIONS
+            if (choice := config.options.get(option))
+        ]
+        self.course_alternatives: set[str] = set()
+        self.parallel_courses: list[dict[str, Any]] = []
 
         self.invalid_subjects = config.options["invalid_subjects"]
 
@@ -880,8 +895,18 @@ class WebUntis:
             )
             return student.id
 
-    def get_timetable(self, start: date | datetime, end: date | datetime, sort=False):
-        """Get the timetable for the given time period"""
+    def get_timetable(
+        self,
+        start: date | datetime,
+        end: date | datetime,
+        sort=False,
+        apply_course_choice=True,
+    ):
+        """Get the timetable for the given time period.
+
+        Unless ``apply_course_choice`` is False, lessons of courses running in
+        parallel to a chosen course (WPI, team project) are left out.
+        """
         timetable_object: Mapping[str, Any] = {}
         if self.timetable_source != "personal":
             timetable_object = cast(
@@ -928,10 +953,23 @@ class WebUntis:
                 ),
             )
 
+        if apply_course_choice:
+            result = self._drop_parallel_courses(result)
+
         if sort:
             result = sorted(result, key=lambda x: x.start)
 
         return result
+
+    def _drop_parallel_courses(self, lessons: list[Any]) -> list[Any]:
+        """Leave out the courses other students attend in a chosen block."""
+        if not self.course_choices:
+            return lessons
+        remaining, found = drop_parallel_courses(
+            lessons, self.course_choices, self.course_alternatives
+        )
+        self.course_alternatives |= found
+        return remaining
 
     def _next_class(self):
         """returns time of next class."""
@@ -1053,7 +1091,12 @@ class WebUntis:
             )
         else:
             week_start = today - timedelta(days=today.weekday())
-        table = self.get_timetable(start=week_start, end=in_x_days)
+        table = self.get_timetable(
+            start=week_start, end=in_x_days, apply_course_choice=False
+        )
+        # Offered in the course choice options, from the unfiltered timetable.
+        self.parallel_courses = parallel_courses(table)
+        table = self._drop_parallel_courses(table)
 
         event_list = []
         self.event_list = []
@@ -1149,7 +1192,9 @@ class WebUntis:
         compact_result=True,
         compact_tolerance_minutes=0,
     ):
-        table = self.get_timetable(start=start.date(), end=end.date())
+        table = self.get_timetable(
+            start=start.date(), end=end.date(), apply_course_choice=filter_on
+        )
 
         events = []
 
@@ -1178,7 +1223,9 @@ class WebUntis:
         return events
 
     def _count_lessons(self, start, end, filter_on, count_cancelled=False):
-        table = self.get_timetable(start=start.date(), end=end.date())
+        table = self.get_timetable(
+            start=start.date(), end=end.date(), apply_course_choice=filter_on
+        )
 
         result = {}
 

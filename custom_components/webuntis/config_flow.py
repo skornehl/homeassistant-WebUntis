@@ -29,6 +29,7 @@ from .const import (
 )
 from .live_activities import LiveActivityOptionsFlowMixin
 from .notify import get_notification_data
+from .utils.course_choice import COURSE_OPTIONS, NO_COURSE, course_label, key_label
 from .utils.errors import *
 from .utils.qrLogin import parse_qr_code
 from .utils.schoolyears import resolve_schoolyear
@@ -722,6 +723,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
 OPTIONS_MENU = [
     "filter",
+    "courses",
     "calendar",
     "lesson",
     "notify_menu",
@@ -850,6 +852,64 @@ class OptionsFlowHandler(config_entries.OptionsFlow, LiveActivityOptionsFlowMixi
                     ): selector.BooleanSelector(),
                 }
             ),
+        )
+
+    async def async_step_courses(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResultType:
+        """Choose the student's course in elective blocks (WPI, team project)."""
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            choices = {
+                option: user_input.get(option) or NO_COURSE for option in COURSE_OPTIONS
+            }
+            chosen = [choice for choice in choices.values() if choice]
+            if len(chosen) != len(set(chosen)):
+                errors["base"] = "same_course"
+            else:
+                return await self.save(choices)
+
+        server = self.hass.data[DOMAIN][self._config_entry.unique_id]
+        courses = server.parallel_courses
+        select_options = [
+            selector.SelectOptionDict(
+                value=course["value"],
+                label=course_label(course, self.hass.config.language),
+            )
+            for course in courses
+        ]
+        # Keep a stored choice selectable even when its course is not in the
+        # timetable right now (holidays), so saving does not drop it.
+        known = {course["value"] for course in courses}
+        for option in COURSE_OPTIONS:
+            current = self._config_entry.options.get(option)
+            if current and current not in known:
+                select_options.append(
+                    selector.SelectOptionDict(value=current, label=key_label(current))
+                )
+                known.add(current)
+
+        defaults = user_input or self._config_entry.options
+        schema = {}
+        for option in COURSE_OPTIONS:
+            current = defaults.get(option) or NO_COURSE
+            schema[
+                vol.Optional(
+                    option,
+                    description={"suggested_value": current} if current else None,
+                )
+            ] = selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=select_options,
+                    mode=selector.SelectSelectorMode.DROPDOWN,
+                )
+            )
+
+        return self.async_show_form(
+            step_id="courses",
+            data_schema=vol.Schema(schema),
+            errors=errors,
+            description_placeholders={"count": str(len(courses))},
         )
 
     async def async_step_calendar(

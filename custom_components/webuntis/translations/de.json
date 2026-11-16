@@ -230,6 +230,18 @@
         "description": "Einstellungen zur Kalender Darstellung.",
         "title": "Kalender-Einstellungen"
       },
+      "courses": {
+        "title": "Kurswahl",
+        "description": "Manche Schulen tragen alle Kurse eines Wahlpflicht-Blocks in den Stundenplan jedes Schülers ein. Wähle den Kurs, den dein Kind besucht: Die anderen Kurse zur selben Zeit verschwinden dann aus Kalender und Sensoren und lösen keine Stundenänderungs-Events oder Benachrichtigungen mehr aus.\n\nIn den nächsten Wochen laufen {count} Kurse parallel. Leere ein Feld, um wieder alle Kurse anzuzeigen.",
+        "data": {
+          "course_wpi": "Wahlpflichtkurs (WPI)",
+          "course_team_project": "Teamprojekt"
+        },
+        "data_description": {
+          "course_wpi": "Der Kurs, den dein Kind im Wahlpflicht-Block belegt.",
+          "course_team_project": "Das Teamprojekt, das dein Kind belegt."
+        }
+      },
       "edit_live_activity": {
         "title": "Live-Stundenplan",
         "description": "Live Activity für den Stundenplan hinzufügen oder bearbeiten.",
@@ -293,6 +305,7 @@
         "menu_options": {
           "backend": "Backend",
           "calendar": "Kalender",
+          "courses": "Kurswahl (WPI, Teamprojekt)",
           "filter": "Filter",
           "lesson": "Stunden-Darstellung",
           "live_activities_menu": "Live-Stundenplan (Live Activities)",
@@ -352,6 +365,7 @@
     "error": {
       "not_a_dict": "Muss ein Dictionary sein",
       "notification_invalid": "Benachrichtigung konnte nicht gesendet werden. Siehe Logs für mehr Infos.",
+      "same_course": "Wähle für WPI und Teamprojekt verschiedene Kurse.",
       "unknown": "Unerwarteter Fehler",
       "unknown_service": "Service-ID nicht gefunden."
     }
